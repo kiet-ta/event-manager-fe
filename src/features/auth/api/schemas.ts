@@ -49,7 +49,13 @@ export const verifyOtpResSchema = z.discriminatedUnion('status', [
   verifyOtpRegistrationRequiredSchema,
 ])
 
+export const refreshResSchema = z.object({
+  accessToken: z.string().min(1, 'Thiếu accessToken từ server.'),
+  tokenType: z.string().min(1, 'Thiếu tokenType từ server.'),
+})
+
 export type SendOtpReq = z.infer<typeof sendOtpReqSchema>
 export type SendOtpRes = z.infer<typeof sendOtpResSchema>
 export type VerifyOtpReq = z.infer<typeof verifyOtpReqSchema>
 export type VerifyOtpRes = z.infer<typeof verifyOtpResSchema>
+export type RefreshRes = z.infer<typeof refreshResSchema>

@@ -1,11 +1,6 @@
-import {
-  verifyOtpResSchema,
-  verifyOtpReqSchema
-  
-  
-} from './schemas'
-import type {VerifyOtpRes, VerifyOtpReq} from './schemas';
 import { postJson } from '#/lib/api-client'
+import { verifyOtpReqSchema, verifyOtpResSchema } from './schemas'
+import type { VerifyOtpReq, VerifyOtpRes } from './schemas'
 
 export async function verifyOtp(body: VerifyOtpReq): Promise<VerifyOtpRes> {
   const validReq = verifyOtpReqSchema.parse({

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ZodError } from 'zod'
+import { useNavigate } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { ApiError } from '#/lib/api-client'
+import { persistLoginTokens, setRegisterToken } from '#/lib/auth-storage'
 import { useVerifyOtp } from '../hooks/useVerifyOtp'
+import { getAuthErrorMessage } from '../helpers/getAuthErrorMessage'
 
 interface VerifyOtpFormProps {
   email: string
@@ -11,23 +12,34 @@ interface VerifyOtpFormProps {
 
 export function VerifyOtpForm({ email }: VerifyOtpFormProps) {
   const [otp, setOtp] = useState('')
+  const navigate = useNavigate()
   const { mutate, isPending, isSuccess, isError, error } = useVerifyOtp()
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    mutate({ email, otp })
+    mutate(
+      { email, otp },
+      {
+        onSuccess: (response) => {
+          if (response.status === 'LOGIN_SUCCESS') {
+            persistLoginTokens(response.accessToken, response.tokenType)
+            navigate({ to: '/' })
+            return
+          }
+
+          setRegisterToken(response.registerToken)
+        },
+      },
+    )
   }
 
   const getErrorMessage = () => {
     if (!isError) return ''
-    if (error instanceof ZodError)
-      return error.issues[0]?.message ?? 'Dữ liệu không hợp lệ.'
-    if (error instanceof ApiError) {
-      if (error.status >= 500) return 'Hệ thống đang bận. Vui lòng thử lại sau.'
-      return error.message
-    }
-    if (error instanceof Error) return error.message
-    return 'Xác thực OTP thất bại.'
+
+    return getAuthErrorMessage({
+      error,
+      fallbackMessage: 'Xác thực OTP thất bại.',
+    })
   }
 
   return (

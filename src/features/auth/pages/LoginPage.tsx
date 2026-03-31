@@ -9,7 +9,7 @@ export const LoginPage = () => {
       className="flex min-h-screen
       items-center justify-center bg-gray-50"
     >
-      <Card className="w-[400x]">
+      <Card className="w-[400px]">
         <CardHeader>
           <CardTitle
             className="text-2xl

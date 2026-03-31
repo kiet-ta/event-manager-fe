@@ -1,3 +1,14 @@
+import {
+  clearAuthState,
+  getAccessToken,
+  setAccessToken,
+} from './auth-storage'
+import {
+  getErrorMessage,
+  getRefreshAccessToken,
+  parseResponsePayload,
+} from './api-response'
+
 export class ApiError extends Error {
   readonly status: number
   readonly payload: unknown
@@ -10,10 +21,27 @@ export class ApiError extends Error {
   }
 }
 
+let refreshPromise: Promise<string | null> | null = null
+
 interface PostJsonOptions<TBody> {
   path: `/${string}`
   body: TBody
   signal?: AbortSignal
+}
+
+function isBrowser() {
+  return typeof window !== 'undefined'
+}
+
+function isAuthPath(path: string) {
+  return path.startsWith('/api/v1/auth/')
+}
+
+function redirectToLogin() {
+  if (!isBrowser()) return
+  if (window.location.pathname !== '/login') {
+    window.location.assign('/login')
+  }
 }
 
 function getApiBaseUrl() {
@@ -26,39 +54,41 @@ function getApiBaseUrl() {
   return baseUrl.replace(/\/+$/, '')
 }
 
-function getErrorMessage(payload: unknown, status: number) {
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    'message' in payload &&
-    typeof payload.message === 'string' &&
-    payload.message.trim().length > 0
-  ) {
-    return payload.message
+async function refreshAccessToken(baseUrl: string): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise
   }
 
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    'error' in payload &&
-    typeof payload.error === 'string' &&
-    payload.error.trim().length > 0
-  ) {
-    return payload.error
+  refreshPromise = (async () => {
+    const refreshUrl = `${baseUrl}/api/v1/auth/refresh`
+    const refreshRes = await fetch(refreshUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    })
+
+    const refreshPayload = await parseResponsePayload(refreshRes)
+    if (!refreshRes.ok) {
+      return null
+    }
+
+    const newAccessToken = getRefreshAccessToken(refreshPayload)
+    if (!newAccessToken) {
+      return null
+    }
+
+    setAccessToken(newAccessToken)
+    return newAccessToken
+  })()
+
+  try {
+    return await refreshPromise
+  } finally {
+    refreshPromise = null
   }
-
-  return `Yêu cầu thất bại (HTTP ${status}).`
-}
-
-async function parseResponsePayload(res: Response): Promise<unknown> {
-  const contentType = res.headers.get('content-type')
-
-  if (contentType?.includes('application/json')) {
-    return res.json()
-  }
-
-  const text = await res.text()
-  return text.length > 0 ? text : null
 }
 
 export async function postJson<TBody>({
@@ -66,19 +96,47 @@ export async function postJson<TBody>({
   body,
   signal,
 }: PostJsonOptions<TBody>): Promise<unknown> {
+  return requestWithRetry({ path, body, signal, hasRetried: false })
+}
+
+async function requestWithRetry<TBody>({
+  path,
+  body,
+  signal,
+  hasRetried,
+}: PostJsonOptions<TBody> & { hasRetried: boolean }): Promise<unknown> {
   const baseUrl = getApiBaseUrl()
   const url = `${baseUrl}${path}`
 
+  const accessToken = getAccessToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (accessToken && !isAuthPath(path)) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'include',
+    headers,
     body: JSON.stringify(body),
     signal,
   })
 
   const payload = await parseResponsePayload(res)
+
+  if (res.status === 401 && !isAuthPath(path) && !hasRetried) {
+    const refreshedAccessToken = await refreshAccessToken(baseUrl)
+
+    if (refreshedAccessToken) {
+      return requestWithRetry({ path, body, signal, hasRetried: true })
+    }
+
+    clearAuthState()
+    redirectToLogin()
+  }
 
   if (!res.ok) {
     throw new ApiError(

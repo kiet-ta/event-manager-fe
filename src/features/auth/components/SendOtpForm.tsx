@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { ZodError } from 'zod'
 import ReCAPTCHA from 'react-google-recaptcha'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { ApiError } from '#/lib/api-client'
 import { useSendOtp } from '../hooks/useSendOtp'
+import { getAuthErrorMessage } from '../helpers/getAuthErrorMessage'
 
 export function SendOtpForm() {
   const [email, setEmail] = useState('')
@@ -60,23 +59,10 @@ export function SendOtpForm() {
       return ''
     }
 
-    if (error instanceof ZodError) {
-      return error.issues[0]?.message ?? 'Dữ liệu không hợp lệ.'
-    }
-
-    if (error instanceof ApiError) {
-      if (error.status >= 500) {
-        return 'Hệ thống đang bận. Vui lòng thử lại sau.'
-      }
-
-      return error.message
-    }
-
-    if (error instanceof Error) {
-      return error.message
-    }
-
-    return 'Gửi OTP thất bại'
+    return getAuthErrorMessage({
+      error,
+      fallbackMessage: 'Gửi OTP thất bại.',
+    })
   }
 
   return (
